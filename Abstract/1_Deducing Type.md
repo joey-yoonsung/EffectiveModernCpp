@@ -266,4 +266,56 @@ auto는 위 3가지에 쓰이는 것은 아니지만, 원리는 template type de
 
 
 ## Item 3: Understand decltype
-  * auto : template에 대한 type deduction
+쉽게 이해하면 auto는 선언된 형식으로부터 추론, decltype은 값으로 부터 타입을 추론한다고 생각하면 된다.
+ * auto : template에 대한 type deduction
+ 
+ * 주된 사용 : ParamType 에 따른 return type의 추론. 
+ 
+
+## Item 4: Know how to view deduced types.
+
+### IDE Editor 쓰셈
+### Compiler diagnostics
+컴파일 옵션으로 no-warning 같은거 때리지 말고 평소에 잘 보셈
+### Runtime Output
+ * printf 쓰지마
+ * typeid(var).name()
+    * 대신 컴파일러마다 다름
+    * Clang, GNU
+        * 약자로 씀
+        * int -> i
+        * pointer const -> PK
+    * Microsoft
+        * human readable 하게 찍어줌
+    * template function 안에서
+    ```cpp
+        template<typename T>
+        void f(const T& param){
+            using std::cout;
+            cout << "T = " << typeid(T).name() << endl;
+            cout << "param = " << typeid(param).name() << endl;
+        }
+        //result 둘다 : PK6Widget (const Widget *)
+    ```
+        * 그런데 여기서 param은 const Widget* const &인데, 잘못 나오네?
+            * template-function에서 typeid().name()은 무조건 by-value 로만 인식함. 
+                * reference-ness 무시, volatile, const 무시.
+                
+            * 근데 IDE도 믿을만한게 못됨. ㅋㅋ
+        * typeid, IDE 모두 못 믿을 땐, Boost.TypeIndex
+    ```cpp
+        #include<boost/type_index.hpp>
+        
+        template<typename T>
+        void f(const T& param){
+            using std:cout;
+            using boost::typeindex::type_id_with_cvr;
+            
+            cout << "T = " << type_id_with_cvr<T>().pretty_name() << endl;
+            cout << "param = " << type_id_with_cvr<decltype(param)>().pretty_name() << endl;
+    ```
+        * 이렇게 하면 위의 예제의 param 이 제대로 Widget const* const& 가 나옴.
+        
+### 요약
+ * Deduced type 확인하는 방법 : IDE, compiler error/warning message, Boost.TypeIndex lib.
+ * 원리를 이해하고 있으셈
