@@ -266,4 +266,8 @@ auto는 위 3가지에 쓰이는 것은 아니지만, 원리는 template type de
 
 
 ## Item 3: Understand decltype
-  * auto : template에 대한 type deduction
+ * auto : template에 대한 type deduction
+ * decltype : 값으로 type deduction
+
+ * UseCase
+    * 주로 ParamType에 대해서 return type 이 결정될 때 많이 쓴다.
