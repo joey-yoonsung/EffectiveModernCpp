@@ -271,3 +271,101 @@ auto는 위 3가지에 쓰이는 것은 아니지만, 원리는 template type de
 
  * UseCase
     * 주로 ParamType에 대해서 return type 이 결정될 때 많이 쓴다.
+
+예제
+```cpp
+    template<typename Container, typename Index>
+    auto authAndAccess(Container& c, Index i) -> decltype(c[i]){
+        authenticateUser();
+        return c[i];
+    }
+```
+ * 예제 설명
+    * return type 이 auto인 것은 type deduction 이랑 관련 없다.
+    * trailing return type 문법 : return type 은 parameter 리스트와 그에 따른 -> 뒤의 값을 따른다.
+
+ * return type & lamda
+    * C++11 : single statement lamdas to be deduced.
+    * C++14 : all lamdas and all functions
+
+예제2 : C++14
+```cpp
+    template<typename Container, typename Index>
+    auto authAndAccess(Container& c, Index i){ //C++14 don't need '->'
+        authenticateUser();
+        return c[i];
+    }
+
+    std::deque<int> d;
+    authAndAccess(d,5) = 10; //error
+```
+ * 문제점 auto는 referenceness를 제거 하기 때문에 c[i]는 값으로만 사용할 수 밖에 없다.
+    * d[5]는 int& 를 반환하지만 auto 때문에 int를 return 함.
+    * **Q : 그럼 예제1 에서는 int&가 리턴되는거야?**
+
+예제3 : 해결책
+```cpp
+    template<typename Container, typename Index>
+    decltype(auto) authAndAccess(Container& c, Index i){ //C++14 don't need '->'
+        authenticateUser();
+        return c[i];
+    }
+```
+ * 해결 : decltype(auto)
+    * 이렇게 하면 auto가 무엇이든간에 decltype으로 추론함. -> T& 그대로 리턴함.
+    * auto쓰는 모든 곳에 적용 가능
+
+예제4 : decltype(auto) type variable definition
+```cpp
+    Widget w;
+    const Widget& cw = w;
+    auto myWidget1 = cw;            //type is Widget
+    decltype(auto) myWidget2 = cw; // type is const Widget&
+```
+
+예제 5 : lvalue, rvalue judgement by template
+```cpp
+    template<typename Container, typename Idex>
+    decltype(auto) authAndAccess(Container& c, Index i);
+```
+ * 선언만 보고 return 이 어떤 타입이 올지 추론
+    * lvalue-reference to non-const 를 받았으므로 수정가능한 element를 던질 것이다.
+    * 단, rvalue를 pass하는 건 불가능하다.
+        * rvalue 는 lvalue reference랑 바인드 할 수 없으므로
+        * rvalue 쓰는게 말이 안되는게, rvalue로 들어오면 임시객체이므로 해당 statement 가 끝나면 dangled pointer 가 될 거다.
+
+예제6 : want to get rvalue
+```cpp
+    std::deque<std::string> makeStringDeque(); //factory function
+    //copy of 5th element of deque
+    auto s = authAndAccess(makeStringDeque(), 5);
+```
+ * 이렇게 쓰고 싶으면 rvalue, lvalue reference 케이스 모두 Overload 하셈.
+ * 근데 유지보수하기 힘드니까 universal reference 쓰셈 (자세한건 [Item24])
+    * 근데 이렇게 하려면 리턴을 forward해야함 (자세한건 [Item25])
+```cpp
+    template<typename Container, typename Idex>
+    decltype(auto) authAndAccess(Container&& c, Index i){
+        authenticateUser();
+        return std::forward<Container>(c)[i];
+    }
+```
+
+ * decltype이 예상한데로 동작 안하는 경우도 드물게 있어!
+    * Names are lvalue expression : works fine.
+    * lvalue expressions : 이건 decltype 이 항상 lvalue reference로 인식해버려
+
+예제 : lvalue expression to decltype
+```cpp
+    decltype(auto) f1(){ int x = 0; return x;}     //return int
+    decltype(auto) f2(){ int x = 0; return (x);}   //return int&
+```
+ * 여기서 f2의 리턴은 local 변수의 reference. 따라서 코드블럭이 끝나기 때문에 리턴된 이후에는 이상한 주소 참조.
+ * 그래서 [Item4] 에서 말하는 거처럼 decltype(auto)쓸 때는 주의깊게 확인해.
+ * 근데 normal한 경우에는 대부분 예상한대로 동작하고 사용성/성능에 좋아.
+
+### 요약
+ * decltype almost always yields the type of a variable or expression without any modification.
+ * For lvalue expressions of type T other than names, decltype always reports a type of T&.
+ * C++14 supports decltype(auto), which, like auto, deduces a type from its initializer, but it performs the type deduction using the decltype rules.
+
