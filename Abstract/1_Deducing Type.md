@@ -302,6 +302,8 @@ auto는 위 3가지에 쓰이는 것은 아니지만, 원리는 template type de
  * 문제점 auto는 referenceness를 제거 하기 때문에 c[i]는 값으로만 사용할 수 밖에 없다.
     * d[5]는 int& 를 반환하지만 auto 때문에 int를 return 함.
     * **Q : 그럼 예제1 에서는 int&가 리턴되는거야?**
+        * C++11에서는 decltyp(expression)이 expression 을 가감하지 않고 그대로 추론해준다.
+        * 위 문제는 C++14에서 ->decltype이 없는 경우에 해당한다.
 
 예제3 : 해결책
 ```cpp
