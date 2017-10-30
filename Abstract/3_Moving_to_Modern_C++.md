@@ -186,9 +186,351 @@ Template author라면 arbitrary num of args 로부터 arbitrary object를 생성
     template<typename T, typename... Ts>
     void doSomework(Ts&&... params0) { //create local T object from params...}
 ```
-localObject는
+이렇게 쓴다고 하면.
 ```cpp
-    T localObject(std::ofrward<Ts>(params)...);
+    T localObject(std::forward<Ts>(params)...);
     std::vector<int> v;
     doSomeWork<std::vector<int>>(10,20);
 ```
+ * 문제
+    * parentheses 를 쓰면 10인 element 20개가 되고
+    * braces 를 쓰면 element 가 2개가 됨.
+    * 근데 이게 진짜 문제가 되는 거는 smart pointer(std::make_unique, std::make_shared) 쓸 때
+
+### 요약
+ 1. Braced initialization hte most widely usable initialization syntax, it prevents narrowing conversions, and it's immune to C++'s most vexing parse.
+ 2. During constructor overload resolution, braced initializers are matched to std::initializer_list parameters if at all possible, even if other constructors offer seemingly better matches.
+ 3. An example of where the choice between parentheses and braces can make a significant difference is creating a std::vector<numeric type> with two arguments.
+ 4. Choosing between parentheses and braces for object creation inside templates can be challenging.
+
+
+## Item8: Prefer nullptr to 0 and NULL.
+
+ * 주의 : 0은 원래 int 이지만, pointer에 대고 하면 nullptr을 의미한다.
+ * 주의 : NULL이 주는 불확실함이 있어.
+    * int 가 아닌 integral type은 NULL할당이 가능
+
+C++98에서 pointer 와 integral type의 overloading 할때, pointer overload가 절대 불리지 않아.
+```cpp
+    void f(int);
+    void f(bool);
+    void f(void*);
+    f(0);
+    f(NULL); // f(int)를 부름.
+```
+이런 문제에도 계속 NULL과 0을 쓴다...
+
+nullptr의 원리
+ * 모든 타입의 포인터로 본다. (integer로 안봄)
+    * std::nullptr_t
+        * implicit conversion to all raw pointer types.
+```cpp
+    f(nullptr); //call void f(void*)
+```
+overload 문제 해결 + code clarity 향상
+```cpp
+    auto result = findRecord(/*args*/);
+    if(result == 0 ){...}       // (1)
+    if(result == nullptr ){...} // (2)
+```
+
+nullptr을 써야하는 이유 when use template
+```cpp
+    int f1(std::shared_ptr<Widget> spw);
+    double f2(std::unique_ptr<Widget> upw);
+    bool f3(Widget* pw);
+    template<typename FuncType, typename MuxType, typename PtrType>
+    auto lockAndCall(FuncType func, MuxType& mutex, PtrType ptr) -> decltype(func(ptr))
+    {
+        MuxGuard g(mutex);
+        return func(tpr);
+    }
+
+    auto result1 = lockAndCall(f1, f1m, 0);         //error
+    auto result2 = lockAndCall(f2, f2m, NULL);      //error
+    auto result3 = lockAndCall(f3, f3m, nullptr); //fine
+```
+ * template, auto type deducing 에서 shared_ptr, unique_ptr로 추론했는데, int가 입력되어 있어서 컴파일 에러.
+
+### 요약
+ 1. Prefer nullptr to 0 and NULL.
+ 2. Avoid overloading on integral and pointer types.
+
+
+## Item 9: Prefer alias declarations to typedefs.
+typedefs are soooo C++98!!!
+
+typedef는 터널증후근 위험을 만들어!! ㅋㅋㅋㅋㅋ
+```cpp
+    typedef std::unique_ptr<std::unordered_map<std::string, std::string>> UPtrMapSS;
+    using  UPtrMapSS = std::unique_ptr<std::unordered_map<std::string, std::string>>;
+```
+
+Function Pointer선언을 보면 alias가 더 편하고 직관적인 것을 알 수 있어.
+```cpp
+    typedef void (*FP)(int, const std:string&);
+    using FP= void (*)(int, const std::string&);
+```
+
+template 의 경우는 typedef 를 선호할수도 있다?
+ * alias 는 templatized 가능 (alias templates), typedef는 불가능.
+    * struct 안에 nested 된 typedef 로 C++98에서는 함.
+
+alias templates
+```cpp
+template<typename T>
+using MyAllocList = std::list<T, MyAlloc<T>>;
+```
+
+C++98's struct nested typedefs
+```cpp
+template<typename T>
+struct MyAllocList{
+    typedef std::list<T, MyAlloc<T>> type;
+};
+```
+
+typedef inside template
+ * MyAllocList<T> 는 dependent type이다.
+ * dependent type 은 앞에 typename 이 앞에 와야한다
+ * ::type 으로 실제 타입을 받을 수 있다.
+```cpp
+template<typename T>
+class Widget{
+private:
+    typename MyAllocList<T>::type list;
+};
+```
+
+alias inside template
+ * non-dependent type이다.
+ * 일반 alias 선언을 해놓았다면 그냥 쓸 수 있다.
+```cpp
+template<typename T>
+using MyAllocList = std::list<T, MyAlloc<T>>;
+
+template<typename T>
+class Widget{
+private:
+    MyAllocList<T> list;
+};
+```
+
+type-traits ::type
+ * const, & 벗기고 T만 받고 싶을 때
+ * &를 붙이고 싶을 때
+ * 전부 제공 하는건 아니지만, predictable interface 임
+```cpp
+    std::remove_const<T>::type      //T from const T
+    std::remove_reference<T>::type  // T from T7 and T&&
+    std::add_lvalue_referenece<T>::type // T& from T
+```
+
+C++14에서 std:;transformation_t 를 추가함. 근데 C++11의 std::transformation::type 이랑 사실상 같아서 의미없음
+```cpp
+    std::remove_const_t<T>            // T from const T
+    std::remove_reference_t<T>        // T from T7 and T&&
+    std::add_lvalue_referenece_t<T>   // T& from T
+```
+
+정리
+ 1. typedefs don't support templatization, but alias declarations do.
+ 2. Alias templates avoid the "::type" suffix and, in templates, the "typename" prefix often required to refer to typedefs.
+ 3. C++14 offers alias templates for all the C++11 type traits transformations.
+
+## Item 10 : Prefer scoped enums to unscoped enums.
+
+### 장점 1
+C++98 stype, unscoped enums
+```cpp
+enum Color { black, white, red }; //same scope as Color
+auto white = false; //error! white already declared in this scope
+```
+
+C++11 scoped enums
+```cpp
+enum class Color { black, white, red };
+auto white = false;     // fine
+Color c = white;        // error - no enumerator named white in this scope
+Color c = Color::white; // fine
+auto c = Color::white;  // fine
+```
+
+### 장점 2
+
+unscoped enums can implicitly convert to integral types
+```cpp
+enum Color { black, white, red};
+
+std:;vector<std::size_t> primeFactors(std::size_t x);
+
+Color c = red;
+if(c<14.5){
+    auto factor = primeFactors(c);
+}
+```
+
+scoped enum 는 strong type!
+```cpp
+enum class Color { black, white, red};
+Color c = Color::red;
+
+if(c < 14.5){ //error
+    auto factors = primeFactors(c); //error! can't pass Color to function expecting std::size_t
+}
+```
+
+그래도 다른 타입과 호환하고 싶으면 static_cast를 쓰셈
+```cpp
+if(static_cast<double>(c) < 14.5){ // valid
+    auto factors = primeFactors(static_cast<std::size_t>(c)); // can compile
+}
+```
+
+### 장점 3
+forward declared 가능
+```cpp
+enum Color; //error
+enum class Color; // fine
+```
+
+### 잘못된 점 ???
+enum의 값은 compiler가 integral type 중에 임의로 넣음.
+
+때론 range가 너무 커질 수 있음
+```cpp
+enum Status {
+    good = 0,
+    incomplete = 100,
+    corrupt = 200,
+    indeterminate = 0xFFFFFFFF
+};
+```
+
+### 장점 4
+forward declare가 불가능한 enum은 값을 추가하면 Status 를 쓰는 코드 전부 재컴파일 해야함
+```cpp
+enum Status {
+    good = 0,
+    incomplete = 100,
+    corrupt = 200,
+    audited = 500,
+    indeterminate = 0xFFFFFFFF
+};
+```
+
+### 장점 5
+underlying type 을 선언할 수 있음 (default 는 int)
+```cpp
+enum class Status; //int
+enum class Status: std::uint32_t;
+enum Color: std::unint8_t; //이렇게하면 forward declared enum type이 됨. unscoped 이더라도
+enum class Status: std::uint32_t{ good =0 , failed =1 }; // definition 과 같이 쓸 수 있음
+```
+
+이렇게 scoped enum으로 namespace pollution, implicit type conversion 을 피할 수 있어
+
+### indexing
+field 이름으로 get 할 수 있어
+```cpp
+using UserInfo = std::tuple<std::string,    //name
+                            std::string,    //email
+                            std::size_t;    //reputation
+
+UserInfo uInfo;
+auto val = std::get<1>(uInfo); // do not convince 1'st field is name, and not capturable code
+
+enum UserInfoFields{ uiName, uiEmail, uiReputation};
+auto val = std::get<uiEmail>(uInfo);
+```
+```cpp
+enum class UserInfoFields{ uiName, uiEmail, uiReputation};
+auto val = std::get<static_cast<std::size_t>(UserInfoFields::uiEmail)>(uInfo);
+```
+그런데 이런식으로 쓰려면 constexpr ([Item 15]) function으로 써야지.
+
+constexpr과 std::underlying_type<E>::type 으로 이렇게 만들수 있어
+```cpp
+template<typename E>
+constexpr typename std::underlying_type<E>::type toUType(E enumerator) noexcept{
+    return static_cast<typename std::underlying_type<E>::type> enumerator;
+}
+```
+C++14에서는 std::underlying_type<E>::type 을 std::underlying_type_t로 할 수 있다.
+```cpp
+template<typename E>
+constexpr typename std::underlying_type_t<E> toUType(E enumerator) noexcept{
+    return static_cast<typename std::underlying_type_t<E>> enumerator;
+}
+```
+그러면 이렇게 쓸 수 있어
+```cpp
+    auto val = std::get<toUType(UserInfoFields::uiEmail)>(uInfo);
+```
+**Q : 근데 이러면 앞에꺼보다 더 복잡한거 아니야?**
+
+enum의 pitfall을 피하기 위해서는 조금 손 더 가는 것은 감수해야...
+
+### 요약
+ 1. C++98-style enums are now known as unscoped enums.
+ 2. Enumerators of scoped enums are visible only within the enum. They convert to other types only with a cast.
+ 3. Both scoped and unscoped enums support specification of the underlying type. The default underlying type for scoped enums is int. Unscoped enums have no default underlying type.
+ 4. Scoped enums may always be forwarded-declared. Unscoped enums may be forward-declared only if their declaration specifies an underlying type.
+
+## Item 11 : Prefer deleted functions to private undefined ones.
+클라이언트한테 노출 시키고 싶지 않은 member function 이 있을때, public - =delete 로 선언하셈.
+
+C++98에서는 private하는 방법 밖에 없는데, private 은 friend 를 쓰면 쓸 수 있어.
+
+ * public 으로 해야하는 이유는?
+    * private과 delete가 같이 있을 때, private으로 먼저 accessibility 를 결정하고 deleted가 무시됨.
+
+int로의 implicit conversion (C로부터온 heritage중 가장 불편하게만드는 것) 을 막을 수 있음
+```cpp
+bool isLucky(int member);
+
+if(isLucky('a')) ...
+if(isLucky(true)) ...
+if(isLucky(3.5)) ...
+```
+이런 경우 delete로 다른 타입을 만들면 다른 타입일 때 compile-error
+```cpp
+bool isLucky(int member);
+bool isLucky(bool member) = delete;
+bool isLucky(char member) = delete;
+bool isLucky(double member) = delete;
+
+
+if(isLucky('a'))    //error
+if(isLucky(true))   //error
+if(isLucky(3.5))    //error
+```
+
+template instantiation 을 막을 수 있다
+```cpp
+template<typename T>
+void processPointer(T* ptr);
+
+template<>
+void processPointer<void>(void*) = delete;
+template<>
+void processPointer<char>(char*) = delete;
+```
+const version, volatile 버전도 만드셈
+
+다른 포인터는 가능한데 void* 만 지우고 싶다면?
+ * 클래스 안에서는 불가능
+ * 클래스 밖에서 delete선언
+```cpp
+class Widget{
+public:
+    template<typename T>
+    void processPointer(T* ptr){...}
+};
+template<>
+void Widget::processPointer<void>(void*) = delete;
+```
+
+### 요약
+ 1. Prefer deleted functions to private undefined ones.
+ 2. Any function may be deleted, including non-member functions and template instantiations.
