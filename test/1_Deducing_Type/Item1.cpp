@@ -46,6 +46,16 @@ auto authAndAccess(Container& c, Index i)-> decltype(c[i]){ //C++14 don't need '
     return c[i];
 }
 
+class Widget{
+public:
+    Widget(int a, double d){
+      cout << "int, double"<< endl;
+    }
+    Widget(std::initializer_list<double> li){
+        cout << "list"<< endl;
+    }
+};
+
 TEST_CASE("Item1", "[effective][template][deduction]") {
 
     GIVEN("Case1"){
@@ -81,5 +91,20 @@ TEST_CASE("Item1", "[effective][template][deduction]") {
         d.push_back(2);
         authAndAccess(d, 1) = 10;
         CHECK(d[1]==10);
+    }
+
+    GIVEN("brace"){
+        WHEN("normal new"){
+            Widget a{1, 2};
+            Widget b(1, 2);
+
+        }
+        WHEN("smart ptr"){
+
+            shared_ptr<Widget> ptr = make_shared<Widget>(1,2);
+            shared_ptr<Widget> ptr2 = make_shared<Widget>(std::initializer_list<double>{1.0, 2.0});
+
+            double d = NULL;
+        }
     }
 }
