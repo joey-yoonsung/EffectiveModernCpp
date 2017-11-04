@@ -14,3 +14,5 @@
  * 복잡한 선언들 std::list<shared_ptr<GuidBaseTraceWrapper>> 이런거 alias로 간단하게 만들자.
 ### Item 10 : Prefer scoped enums to unscoped enums.
  * native message 의 type flag 를 scoped type:underlying_type 써서 하자. 객체도 scoped enum 타입으로 갖게 하자.
+### Item 19 : Use std::shared_ptr for shared-ownership resource management.
+ * boost::asio::service 로 trace 객체로 넘길 때, move로 넘기면 더 빠르지 않을까?
