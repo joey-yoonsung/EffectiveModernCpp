@@ -170,11 +170,68 @@ shared_ptr의 control block과 관련된 rule
  * When a std::shared_ptr constructor is called with a raw pointer, it creates a control block.
     * 이미 control block을 가진 pointer (shared_ptr, weak_ptr) 을 parameter로 받아서 shared_ptr 객체가 create 되는 경우는 이미 가진 control block을 사용함.
 
-주의할 점 : 위의 룰에 따라 하나의 raw pointer로 부터 별도의 control block 을 가지는 두개 이상의 객체를 생성하게 되면, 하나의 raw pointer에 대해서 destroy가 두 번 이상 일어나게 된다. (SEGEV fault 남)
-
-하나의 raw pointer로 부터 2개의 control block 이 사용되는 잘 못된 예제
+잘못된 예제 1 : 하나의 raw pointer로 부터 2개의 control block 이 사용됨 
 ```cpp
 auto pw = new Widget; //raw pointer  -그런데 shared_ptr쓸 거면서 이렇게 먼저 raw pointer를 만들어 놓는 것도 문제.
 std::shared_ptr<Widget> spw1(pw, loggingDel);
 std::shared_ptr<Widget> spw2(pw, loggingDel);
 ```
+
+문제점 :  위의 룰에 따라 하나의 raw pointer로 부터 별도의 control block 을 가지는 두개 이상의 객체를 생성하게 되면, 하나의 raw pointer에 대해서 destroy가 두 번 이상 일어나게 된다. (SEGEV fault 남)
+ * std::make_shared 를 쓰셈
+    * 그런데 make_shared를 쓰면 custom deleter를 못 씀.
+    * 그러면 make_shared 블럭 안에서 new 를 때리셈
+     
+수정 : custom deleter를 쓰고 같은 control block 을 쓰도록 만드는 예제 
+```cpp
+std::shared_ptr<Widget> spw1(new Widget, loggingDel);
+std::shared_ptr<Widget> spw2(spw1);
+```
+
+잘못된 예제 2 : shared_ptr을 담을 곳에 this를 넘김
+```cpp
+std::vector<std::shared_ptr<Widget>> processedWidgets;
+class Widget{
+public:
+    void process(){
+        processedWidgets.emplace_back(this);
+        //emplace_back()에 대해서는 [Item 42]에서 배운다.
+    }
+};
+```
+shared pointer로 담을 컨테이너에 this를 넘기면 안돼!
+ * this를 받아서 shared_ptr의 constructor 가 불리기는 하지만.
+ * process 함수가 불릴 때마다 같은 pointer의 다른 shared_ptr (다른 control block을 가짐)이 생김.
+    * 원하는 동작이 아님. 잘 못된 예제1과 같은 상황이 발생함.
+  
+수정 : enable_shared_from_this로 해결한다.
+```cpp
+class Widget : public std::enable_shared_from_this<Widget>{
+public : 
+    void process(){
+        processedWidgets.emplace_back(shared_from_this());
+    }
+};
+```
+이렇게 하면 또 다른 shared_ptr 객체가 들어가더라도 같은 control_block을 쓰는 객체가 들어간다.
+ * shared_from_this는 현재 객체의 control_block을 look up 해와서 해당 control_block을 refer하는 객체를 new한다.
+    * 단, 해당 객체를 가진 shared_ptr이 없는 상태에서 하면 exception. 이거 보장 해줘야함.
+    
+shared_from_this()가 원본 shared_ptr 객체가 있는 상태에서 불리는 것을 보장해주는 예제
+```cpp
+class Widget : public std::enble_shared_from_this<Widget>{
+public:
+    template<typename... Ts>
+    static std::shared_ptr<Widget> create(Ts&&... params);
+private:
+    Widget(); //ctor를 private 으로
+};
+```
+
+shared_ptr 쓸 때 메모리 생각
+ * control block이 잡아먹는다.
+    * allocator, deleter
+        * 따로 구현 안하면 작긴 하겠지만, 예측불가
+    * 그 외에도 virtual function 들도 상속됨.
+    * atomic reference count
+    
