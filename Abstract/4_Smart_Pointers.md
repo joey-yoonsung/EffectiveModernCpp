@@ -170,7 +170,7 @@ shared_ptr의 control block과 관련된 rule
  * When a std::shared_ptr constructor is called with a raw pointer, it creates a control block.
     * 이미 control block을 가진 pointer (shared_ptr, weak_ptr) 을 parameter로 받아서 shared_ptr 객체가 create 되는 경우는 이미 가진 control block을 사용함.
 
-잘못된 예제 1 : 하나의 raw pointer로 부터 2개의 control block 이 사용됨 
+잘못된 예제 1 : 하나의 raw pointer로 부터 2개의 control block 이 사용됨
 ```cpp
 auto pw = new Widget; //raw pointer  -그런데 shared_ptr쓸 거면서 이렇게 먼저 raw pointer를 만들어 놓는 것도 문제.
 std::shared_ptr<Widget> spw1(pw, loggingDel);
@@ -181,8 +181,8 @@ std::shared_ptr<Widget> spw2(pw, loggingDel);
  * std::make_shared 를 쓰셈
     * 그런데 make_shared를 쓰면 custom deleter를 못 씀.
     * 그러면 make_shared 블럭 안에서 new 를 때리셈
-     
-수정 : custom deleter를 쓰고 같은 control block 을 쓰도록 만드는 예제 
+
+수정 : custom deleter를 쓰고 같은 control block 을 쓰도록 만드는 예제
 ```cpp
 std::shared_ptr<Widget> spw1(new Widget, loggingDel);
 std::shared_ptr<Widget> spw2(spw1);
@@ -203,11 +203,11 @@ shared pointer로 담을 컨테이너에 this를 넘기면 안돼!
  * this를 받아서 shared_ptr의 constructor 가 불리기는 하지만.
  * process 함수가 불릴 때마다 같은 pointer의 다른 shared_ptr (다른 control block을 가짐)이 생김.
     * 원하는 동작이 아님. 잘 못된 예제1과 같은 상황이 발생함.
-  
+
 수정 : enable_shared_from_this로 해결한다.
 ```cpp
 class Widget : public std::enable_shared_from_this<Widget>{
-public : 
+public :
     void process(){
         processedWidgets.emplace_back(shared_from_this());
     }
@@ -216,7 +216,7 @@ public :
 이렇게 하면 또 다른 shared_ptr 객체가 들어가더라도 같은 control_block을 쓰는 객체가 들어간다.
  * shared_from_this는 현재 객체의 control_block을 look up 해와서 해당 control_block을 refer하는 객체를 new한다.
     * 단, 해당 객체를 가진 shared_ptr이 없는 상태에서 하면 exception. 이거 보장 해줘야함.
-    
+
 shared_from_this()가 원본 shared_ptr 객체가 있는 상태에서 불리는 것을 보장해주는 예제
 ```cpp
 class Widget : public std::enble_shared_from_this<Widget>{
@@ -234,4 +234,141 @@ shared_ptr 쓸 때 메모리 생각
         * 따로 구현 안하면 작긴 하겠지만, 예측불가
     * 그 외에도 virtual function 들도 상속됨.
     * atomic reference count
-    
+ * make_shared 로 최소화 하면 3-word
+ * 속도
+    * dereferencing 은 raw-pointer 와 비교해서 비싸지 않다.
+    * reference count 가 변경되는 작업 (copy ctor, copy assign, destruction) 은 atomic 비용. 하지만 이정도는 single machine instruction 정도로 가벼워
+    * virtual function 은 하나의 shared_ptr object 가 최종 소멸될 때만 한번 불리므로(destructor) virtual function 때문에 오버헤드 커진다는 생각은 안해도 됨.
+ * 속도걱정보다 resource management에서 얻을 수 있는 혜택이 더 크다.
+ * 적용
+    * exclusive ownership 이라면 raw pointer 에서 std::unique_ptr로 바꿔라
+    * std::unique_ptr 에서 std::shared_ptr로 업그레이드 하는건 쉬움
+    * 하지만 거꾸로 적용하는건 어려워. shared_ptr -> unique_ptr, smart pointer ->raw pointer
+
+smart pointer는 single object를 위해 디자인 된거야. custom 해서라도 array 쓸 생각 하지마.(not clever)
+
+
+### 요약
+ 1. std::shared_ptrs offer convenience approaching that of garbage collection for the shared lifetime management of arbitrary resources.
+ 2. Compared to std::unique_ptr, std::shared_ptr objects are typically twice as big, incur overhead for control blocks, and require atomic reference count manipulations.
+ 3. Default resource destruction is via delete, but custom deleters are supported. The type of the deleter has no effect on the type of the std::shared_ptr.
+ 4. Avoid creating std::shared_ptrs from variable of raw pointer type.
+
+
+## Item 20 : Use std::weak_ptr for std::shared_ptr-like pointers that can dangle.
+Dangled 될 가능성 있는 경우 weak_ptr을 쓰셈!
+ * can't be dereferenced.
+ * can't be tested null-ness.
+ * not standalone smart-pointer - it's augmentation of std::shared_ptr.
+    * 그래서 shared_ptr로부터 생김.
+    * shared_ptr과 같은 object를 가진다.
+    * reference count는 쓰지 않는다.
+        * dangled 는 expired로 확인한다.
+
+### weak_ptr 사용 예
+```cpp
+auto spw = std::make_shared<Widget>();
+std::weak_ptr<Widget> wpw(spw);
+spw = nullptr;
+if(wpw.expired()) ... // true
+```
+그런데 expired를 통과 해서 dereferencing 을 하려는 사이에 dangled가 될 수 있어.(reassign or destroyed)
+
+#### 해결책 1 : lock() 으로 shared_ptr을 받아서 쓴다.
+```cpp
+std::shared_ptr<Widget> spw1 = wpw.lock();
+auto spw2 = wpw.lock();
+```
+weak_ptr 이 expired 되었다면 spw2 는 null
+
+#### 해결책 2 : weak_ptr을 shared_ptr의 ctor의 parameter로 넣어서 exception check
+```cpp
+std::shared_ptr<Widget> spw3(wpw); // if wpw's expired, throw std::bad_weak_ptr
+```
+
+### weak_ptr이 왜 useful해?
+
+#### USE_CASE 1 : 넘거준 객체가 살아있는지 확인해야 하는 factory
+```cpp
+std::unique_ptr<const Widget> loadWidget(WidgetID id);
+```
+이런 친구가 있다고 했을 때(factory가 캐시하고 있고 load할때 넘겨줌, lifetime 결정권은 caller가 가지고 있지만 factory도 알아야함), unique_ptr로 넘겨주면 가져간 놈이 destroy 하고나면 factory에서 해당 객체가 dangled 되었는지 확인할 방법이 없어.
+
+이거를 이렇게 바꾸면 load하는 것도 가볍고 좋아
+ * **Q : 더 가벼울 이유는?**
+ * **Q : factory가 가지고 있는 놈이 shared_ptr이어야 진짜 캐시 아닌가?**
+    * 이렇게 하면 한번에 한놈만 가지고 있고, 그 ID값에 대한 사용이 끝나면 다시 재발급 해줌.
+        * 애초에 계속 들고있으면 되는거 아니야?
+```cpp
+std::shared_ptr<const Widget> fastLoadWidget(WidgetID id)
+{
+    static std::unordered_map<WidgetID, std::weak_ptr<const Widget>> cache;
+    //근데 여기서 dangled되었을 때 unordered_map 에서 불필요하게 검색 안하도록 정리하는 로직 필요함. 범위를 벗어나므로 다루지 않음
+    auto objPtr = cache[id].lock();
+    if(!objPtr){
+        objPtr = loadWidget(id);
+        cache[id] = objptr;
+    }
+    return objPtr;
+}
+```
+
+#### USE_CASE 2 : Observer Design Pattern
+observer가 object의 state가 변경되면 알려줘야함.
+ * observer의 lifetime 에 대한 결정권은 subject가 가지지 않음.
+ * 하지만 observer가 destroy 되는 건 subject가 알아야 함. - 관찰 access하면 안되니까.
+
+이런 경우에 each subject가 observer를 weak_ptr로 가지면 됨. noti 하기전에 expired 확인하면 됨.
+
+#### USE_CASE 3 : 순환/상호 참조가 발생할 때.
+lifetime 에 대한 주도권을 가지고 있는 쪽이 shared_ptr. 아닌쪽이 weak_ptr 을 가지고 있도록. (destroy 의 순서를 생각하면 쉬움)
+
+근데 순환/상호 참조의 경우 weak_ptr이 항상 베스트는 아닐 수 있어
+ * Tree (멍청한놈 나야나! 나야나! 순환참조 해결했다고 좋아한놈 나야나! 나야나!)
+    * parent->child : shared_ptr , child->parent : weak_ptr
+        * 트리의 경우 Parent를 통해 child를 접근한다.
+        * Parent가 없어지면 child는 자동으로 없어져야 한다.
+        * **child가 parent보다 오래 살아서 Parent를 찾을 일은 없다.(Dangling 될일 없다)**
+    * parent->child : unique_ptr , child->parent : raw ptr
+
+### 요약
+ 1. Use std::weak_ptr for std::shared_ptr-like pointers that can dangle.
+ 2. Potential use cases for std::weak_ptr include caching, observer lists, and the prevention of std::shared_ptr cycles.
+
+
+## Item 21 : Prefer std::make_unique and std::make_shared to direct use of new.
+
+make_shared : C++11
+
+make_unique : C++14
+
+C++11에서는 이렇게 구현해서 쓰셈.
+```cpp
+template<typename T, typename... Ts>
+std::unique_ptr<T> make_unique(Ts&&... params)
+{
+    return std::unique_ptr<T>(new T(std::forward<Ts>(params)...));
+}
+```
+근데 이거보면 custom deleter 못 넣고, array 못 넣게 되어있네? 직접 만들어서 써.
+ * `주의! std랑 같은 네임스페이스 안에 정의 하면 안돼. 버전 올릴때 crash 날꺼야.`
+
+make류 함수의 특징.
+ * perfect forwarding to constructor for a dynamically allocated object.
+
+std::allocate_shared
+ * make_shared랑 같은데 첫번째 arg로 allocator object를 받음.
+
+### make function 사용하는 차이점 1
+코드가 깔끔함.(Class 이름을 한번 씀)
+ * 근데 나는 멍청하게 make_shared 쓰면서 두번 썼네?
+```cpp
+auto upw1(std::make_unique<Widget>());
+std::unique_ptr<Widget> upw2(new Widget);
+
+auto spw1(std::make_shared<Widget>());
+std::shared_ptr<Widget> spw2(new Widget);
+```
+
+### make function 사용하는 차이점 2
+exception safety

@@ -16,4 +16,8 @@
  * native message 의 type flag 를 scoped type:underlying_type 써서 하자. 객체도 scoped enum 타입으로 갖게 하자.
 ### Item 19 : Use std::shared_ptr for shared-ownership resource management.
  * boost::asio::service 로 trace 객체로 넘길 때, move로 넘기면 더 빠르지 않을까?
- * shared_ptr로 만들 모든 객체 create로 만들도록 하자. 
+ * shared_ptr로 만들 모든 객체 create 패턴으로 만들도록 하자.
+## Item 20 : Use std::weak_ptr for std::shared_ptr-like pointers that can dangle.
+ * Tree  shared_ptr - weak_ptr 을 unique_ptr - raw ptr로 바꿀것
+## Item 21 : Prefer std::make_unique and std::make_shared to direct use of new.
+ * 근데 나는 멍청하게 make_shared 쓰면서 클래스 이름 두번 썼네?
