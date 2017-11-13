@@ -137,6 +137,7 @@ std::shared_ptr<Widget> spw(new Widget, loggingDel);
 shared_ptr은 deleter가 type 에 포함되어 있지 않기 때문에 좀 더 flexible 하다.
  * deleter가 다르더라도 container에 같이 넣을 수 있어.
     * **Q : 그러면 unique_ptr은 왜 type에 들어가도록 만들었지?**
+        * **unique_ptr은 타입 자체에 deleter를 들고있고 shared_ptr은 컨트롤 블럭이 들고 있으니까, 타입에서는 컨트롤 블럭 안까지 보지 않아.**
 
 ```cpp
 auto customDeleter1 = [](Widget *pw){...};
@@ -180,7 +181,12 @@ std::shared_ptr<Widget> spw2(pw, loggingDel);
 문제점 :  위의 룰에 따라 하나의 raw pointer로 부터 별도의 control block 을 가지는 두개 이상의 객체를 생성하게 되면, 하나의 raw pointer에 대해서 destroy가 두 번 이상 일어나게 된다. (SEGEV fault 남)
  * std::make_shared 를 쓰셈
     * 그런데 make_shared를 쓰면 custom deleter를 못 씀.
-    * 그러면 make_shared 블럭 안에서 new 를 때리셈
+        * 생성자가 public 이 아닐때도 못씀
+            * friend 로 하던가, new를 직접해줘야 함.
+    * 그러면 constructor 안에서 new 를 때리셈
+        * **이거도 제약이 있음**
+            * destructor 가 virtual 일때.
+            * 링크 by 우석 :
 
 수정 : custom deleter를 쓰고 같은 control block 을 쓰도록 만드는 예제
 ```cpp
@@ -372,3 +378,43 @@ std::shared_ptr<Widget> spw2(new Widget);
 
 ### make function 사용하는 차이점 2
 exception safety
+
+### 요약
+ 1. Compared to direct use of new, make functions eliminate source code duplication, improve exception safety, and, for std::make_shared and std::allocate_shared, generate code that's smaller and faster.
+ 2. Situations where use of make functions is inappropriate include the need to specify custom deleters and a desire to pass braced initializers.
+ 3. For std::shared_ptrs, additional situations where make functions may be ill-advised include (1) classes with custom memory management and (2) systems with memory concerns, very large objects, and std::weak_ptrs that outlive the corresponding std::shared_ptrs.
+
+## Item 22: When using the Pimpl Idiom, define special member functions in the implementation file.
+
+Pimple Idiom : pointer인 데이터 클래스를 implementation class로 바꾸는 것
+
+예제
+```cpp
+class Widget{
+public:
+    Widget();
+private:
+    std::string name;
+    std::vector<double> data;
+    Gadget g1, g2, g3; //user defined
+}
+```
+이 경우에 Widget을 쓰는 client 는 <string>, <vector>, Gadget 을 모두 빌드해야함.
+
+이거를 C++98 스타일로 바꾸면
+```cpp
+class Widget{
+public:
+    Widget();
+    ~Widget();
+private:
+    struct Impl;
+    Imple *pImpl;
+}
+```
+이렇게하면 Impl만 있으면 되니까 컴파일이 빨라져. 그리고 헤더 내용이 바뀌더라도 재컴파일 필요없고.
+
+### 요약
+ 1. The Pimpl Idiom decreases build times by reducing compilation dependencies between class clients and class implementations.
+ 2. For std::unique_ptr pImpl pointers, declare special member functions in the class header, but implement them in the implementation file. Do this even if the default function implementations are acceptable.
+ 3. The above advice applies to std::unique_ptr, but not to std::shared_ptr.

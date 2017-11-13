@@ -19,5 +19,7 @@
  * shared_ptr로 만들 모든 객체 create 패턴으로 만들도록 하자.
 ## Item 20 : Use std::weak_ptr for std::shared_ptr-like pointers that can dangle.
  * Tree  shared_ptr - weak_ptr 을 unique_ptr - raw ptr로 바꿀것
+ * 아니야 그러면 소유권이 이동되어서 원래 tree에 있는 객체가 null이 됨.
+ * 나는 destroy 시점이 명확하고, 안쓰이는게 보장되니까 그냥 raw-pointer 쓰면 대.
 ## Item 21 : Prefer std::make_unique and std::make_shared to direct use of new.
  * 근데 나는 멍청하게 make_shared 쓰면서 클래스 이름 두번 썼네?
