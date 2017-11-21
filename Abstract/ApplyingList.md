@@ -23,3 +23,5 @@
  * 나는 destroy 시점이 명확하고, 안쓰이는게 보장되니까 그냥 raw-pointer 쓰면 대.
 ## Item 21 : Prefer std::make_unique and std::make_shared to direct use of new.
  * 근데 나는 멍청하게 make_shared 쓰면서 클래스 이름 두번 썼네?
+## Item 25 : Use std::move on rvalue references, std::forward on universal references.
+ * final use : return by value 일 때, lvalue 는 move로 넘기자.
