@@ -27,6 +27,21 @@ const string logAndProcess(T&& param){
     return process(forward<T>(param));
 }
 
+template <typename S>
+std::string getReturn(S&& param){
+    std::string local("b");
+    cout << (int*)&local << endl;
+    return std::forward<std::string>(local);
+}
+
+template <typename S>
+std::string getMoveReturn(S&& param){
+//    std::string&& local //= std::forward<std::string>(param);
+    std::string local("B"); //= std::forward<std::string>(param);
+    cout << (int*)&local << endl;
+    return std::move(local);
+}
+
 TEST_CASE("Item5", "[effective][move][forward][deduction]") {
 
     GIVEN("where encoding ?") {
@@ -35,4 +50,24 @@ TEST_CASE("Item5", "[effective][move][forward][deduction]") {
         CHECK(logAndProcess(w) == "lvalue");
         CHECK(logAndProcess(std::move(w)) == "rvalue");
     }
+
+    GIVEN(" forward return"){
+        std::string input("a");
+        cout << (int*) &(input) << endl;
+        auto val = getReturn(input);
+        cout << (int*) &val<< endl;
+
+        WHEN("move return"){
+            auto mval = getMoveReturn(input);
+            CHECK(mval == "B");
+            cout << mval << endl;
+            cout << input << endl;
+            cout << (int*)&mval << endl;
+
+        }
+
+    }
+    GIVEN("perfect forwarding failure")
 }
+
+

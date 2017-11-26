@@ -25,3 +25,6 @@
  * 근데 나는 멍청하게 make_shared 쓰면서 클래스 이름 두번 썼네?
 ## Item 25 : Use std::move on rvalue references, std::forward on universal references.
  * final use : return by value 일 때, lvalue 는 move로 넘기자.
+## Item 27 : familiarize yourself with alternatives to overloading on universal references.
+ * 부모상속 찾을 때 - is_base_of 로 하자.
+ * assert 쓰자

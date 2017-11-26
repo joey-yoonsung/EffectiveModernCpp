@@ -175,6 +175,7 @@ public:
 
 ### move 에 lvalue 가 들어가서 lvalue 값이 이상해지는 문제
 ```cpp
+//위의 setName 에서 forward 대신 move를 쓰면,
 std::string getWidgetName();
 Widget w;
 auto n = getWidgetname();
@@ -249,6 +250,7 @@ Fraction reduceAndCopy(T&& frac){
     * local object(variable) 은 return 할 때 copy가 일어나도록 함.
     * 그런데 std::move(local var) 의 결과는 local var 의 reference 이므로 local variable 이 아님. 따라서 RVO가 안일어나고 local var 는 free 됨.
         * return 받은 쪽에서는 free 된 놈의 reference 를 참조하니까 이상한 주소를 참조하게 됨.
+        * **근데 값만 잘 받는데? 이상한 주소 참조하지 않음**
 
 RVO 예
 ```cpp
@@ -288,7 +290,8 @@ logAndAdd("Patty Dog");                 //(3) pass literal
     * (1) names.emplace  에서 copy가 됨.
     * (2) 이것도 names.emplace 에서 copy 가 된다. 단, rvalue 를 lvalue 인 name 에 bind 하는 과정에서 move.
         * **Q : move가 암시적으로 불린다는 건가?**
-    * (3) literal 로 넘어가고 literal 이 emplace 부분에서 copy 되고 string 으로 생성됨. 2와의 차이점은 move operation 비용 없이 copy 한 번만 있다는 것.
+        * emplace 에서 copy가 일어나지만, move 로 카피를 줄일 수 있다.
+    * (3) literal 로 넘어가고 literal 이 emplace 부분에서 copy 되고 string 으로 생성됨. 2와의 차이점은 move operation 가능성 없이 copy 한 번만 있다는 것.
 
 universal reference 로 개선
 ```cpp
@@ -668,10 +671,10 @@ typedef int& RvalueRefToT;
 
 ### 요약
   1. Reference collapsing occurs in four contexts:
-    1) template instantiation
-    2) auto type generation
-    3) creation and use of typedefs and alias declarations
-    4) decltype
+     1) template instantiation
+     2) auto type generation
+     3) creation and use of typedefs and alias declarations
+     4) decltype
   2. When compilers generate a reference to a reference in a reference collapsing context, the result becomes a single reference. If either of the original references is an lvalue reference, the result is an lvalue reference. Otherwise it's an rvalue reference.
   3. Universal references are rvalue reference in contexts where type deduction distinguishes lvalues from rvalues and where reference collapsing occurs.
 
@@ -783,6 +786,7 @@ fwd(Widget::MinVals); //error! shoudn't link
 MinVal은 모두 28 값으로 다 컴파일러가 채워넣었는데 fwd는 parameter 로 universal reference 를 받으니까 주소를 찾는데, 찾을 수 없어서 link error.
  * pointer를 넘기는거랑 같음. (dereferenced pointer가 넘어간 꼴)
  * **Q : 근데 cpp 파일에 선언하면 할 수 있다??**
+ * 선언 + cpp 에 구현하면 문제안됨
 
 ### Overloaded function names and template names
 #### Overloaded function name 이 실패하는 케이스
